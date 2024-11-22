@@ -3,17 +3,17 @@ var needle = require("needle");
 var _ = require("lodash");
 var bagpipe = require("bagpipe");
 
-var JUSTWATCH_KEY = process.env.JUSTWATCH_KEY;
-//var JUSTWATCH_KEY = "process.env.JUSTWATCH_KEY";
-var it_IT = "US"; // TODO: UK
-var "https://apis.justwatch.com/content/titles/it_IT/popular" = "http://api-public.guidebox.com/v1.43/"+it_IT+"/"+JUSTWATCH_KEY;
+var GUIDEBOX_KEY = process.env.GUIDEBOX_KEY;
+//var GUIDEBOX_KEY = "process.env.GUIDEBOX_KEY";
+var GUIDEBOX_REGION = "US"; // TODO: UK
+var GUIDEBOX_BASE = "http://api-public.guidebox.com/v1.43/"+GUIDEBOX_REGION+"/"+GUIDEBOX_KEY;
 
 // geolocations for which the add-on will be enabled by default
-var GEOLOCATIONS = ["US", "GB", "CA", "GE", "IL", "FR", "BG", "DK", "NO"];
+var GEOLOCATIONS = ["US", "GB", "CA", "GE", "IT", "FR", "BG", "DK", "NO"];
 
 // geolocations for which we'll make separate guidebox calls to retrieve region-specific info
 // TODO: implement
-var it_ITS = ["US", "GB", "FR"];
+var GUIDEBOX_REGIONS = ["US", "GB", "FR", "IT"];
 
 var pkg = require("./package");
 var manifest = { 
@@ -31,7 +31,7 @@ var manifest = {
     name: pkg.displayName, version: pkg.version, description: pkg.description,
     //icon: "http://www.strem.io/images/icon-watchhub-addon.png",
     logo: "http://www.strem.io/images/watchhub-logo.png",
-    //geolocation: ["US", "GB", "CA", "GE", "IL", "FR", "BG", "DK"],
+    //geolocation: ["US", "GB", "CA", "GE", "IT", "FR", "BG", "DK"],
     geolocation: GEOLOCATIONS,
     repository:  "http://github.com/Stremio/stremio-watchhub",
     endpoint: "http://watchhub.strem.io/stremioget/stremio/v1",
@@ -40,7 +40,7 @@ var manifest = {
     settings: [{
         name: "Default source",
         type: "select",
-        options: [ "All services", "Free services", "Subscription services", "TV Everywhere services", "Netflix", "Hulu", "iTunes", "VUDU"]
+        options: [ "All services", "Free services", "Subscription services", "TV Everywhere services", "Netflix", "Hulu", "iTunes", "VUDU", "NowTv"]
     }],
     sorts: [ 
         { prop: "popularities.guidebox", name: "Guidebox", types: ["channel"] }, // leanback mode channels
@@ -102,7 +102,7 @@ if (process.env.REDIS || process.env.META_DB_REDIS) {
 }
 
 
-function getJustWatchId(query, callback)
+function getGuideBoxId(query, callback)
 {
     var imdb_id = query && query.imdb_id;
     if (! imdb_id) return callback(new Error("imdb_id should be provided"));
@@ -111,7 +111,7 @@ function getJustWatchId(query, callback)
         if (err) console.error(err);
         if (res) return callback(null, res);
 
-        needle.get("https://apis.justwatch.com/content/titles/it_IT/popular"+"/search/"+( query.hasOwnProperty("season") ? "" : "movie/" )+"id/imdb/"+imdb_id, opts, function(err, resp, body) {
+        needle.get(GUIDEBOX_BASE+"/search/"+( query.hasOwnProperty("season") ? "" : "movie/" )+"id/imdb/"+imdb_id, opts, function(err, resp, body) {
             if (body && body.error) return callback(new Error(body.error));
             if (err) return callback(err);
             if (body.id) cacheSet("guidebox-id", imdb_id, body.id, 365*DAY);
@@ -121,7 +121,7 @@ function getJustWatchId(query, callback)
 }
 
 var guideboxCache = { }, guideboxPrg = {};
-function justwatchGet(path, callback) {
+function guideboxGet(path, callback) {
     cacheGet("guidebox", path, function(err, res) {
         if (res) return callback(null, res);
 
@@ -129,7 +129,7 @@ function justwatchGet(path, callback) {
         
         guideboxPrg[path] = [];
 
-        needle.get("https://apis.justwatch.com/content/titles/it_IT/popular"+path, function(err, resp, body) {
+        needle.get(GUIDEBOX_BASE+path, function(err, resp, body) {
             if (err) { console.error("guidebox error at "+path, err) }
 
             if (err) { err = err; body = null; }
@@ -146,33 +146,10 @@ function justwatchGet(path, callback) {
     });
 }
 
-function getJustWatchStream(args, callback)
-
-
-function getJustWatchData(imdb_id, callback) {
-    const url = `https://apis.justwatch.com/content/titles/it_IT/popular`;
-    const options = {
-        method: 'GET',
-        headers: {
-            'Content-Type': 'application/json'
-        }
-    };
-    
-    needle.get(`${url}?query=${imdb_id}`, options, function(error, response) {
-        if (error) {
-            return callback(error);
-        }
-        if (response.body && response.body.items) {
-            return callback(null, response.body.items);
-        } else {
-            return callback(new Error('No data found for IMDb ID: ' + imdb_id));
-        }
-    });
-}
- {
+function getStream(args, callback) {
     if (! (args.query && args.query.imdb_id)) return callback(null, []);
 
-    getJustWatchId(args.query, function(err, id) {
+    getGuideBoxId(args.query, function(err, id) {
         if (err) { console.error(err) ; return callback({ code: 9001, message: "cannot get guidebox id" }) }
 
         if (! id) { console.error("did not manage to match imdb id to guidebox ("+args.query.imdb_id+")"); return callback(null, []); }
@@ -184,13 +161,13 @@ function getJustWatchData(imdb_id, callback) {
         var isSeries = args.query.hasOwnProperty("season") || args.query.type == "series";
         if (isSeries) {
             // TV show
-            justwatchGet("/show/"+id+"/episodes/"+args.query.season+"/0/100/"+sources+"/"+platform+"/true", function(err, body) {
+            guideboxGet("/show/"+id+"/episodes/"+args.query.season+"/0/100/"+sources+"/"+platform+"/true", function(err, body) {
                 if (err) { console.error(err) ; return callback({ code: 9002, message: "can not get guidebox season" }) }
                 serve(_.findWhere(body.results, { episode_number: parseInt(args.query.episode), season_number: parseInt(args.query.season) }));
             });
         } else {
             // Movie
-            justwatchGet("/movie/"+id, function(err, body) {
+            guideboxGet("/movie/"+id, function(err, body) {
                 if (err) { console.error(err) ; return callback({ code: 9003, message: "can not get guidebox movie" }) }
                 serve(body);
             });
@@ -292,7 +269,7 @@ leanbackChannels = require("./leanbackChannels");
 function findLeanback(args, callback) {
     callback(null, leanbackChannels);
     /*
-    justwatchGet("/leanback/all/0/200", function(err, all) {
+    guideboxGet("/leanback/all/0/200", function(err, all) {
         if (err) console.error(err);
 
         leanbackChannels = (all && all.results && all.results.map(function(channel, i, channels) {
@@ -318,7 +295,7 @@ function getLeanback(args, callback) {
     if (! args.query) return callback(new Error("no query"));
     if (! args.query.guidebox_id) return callback(new Error("no guidebox_id"));
 
-    justwatchGet("/show/"+args.query.guidebox_id+"/clips/all/0/25/youtube/all/true?min_duration=60", function(err, res) {
+    guideboxGet("/show/"+args.query.guidebox_id+"/clips/all/0/25/youtube/all/true?min_duration=60", function(err, res) {
         if (err) return callback({ message: err.message || err, code: 9051 });
 
         var channel = _.findWhere(leanbackChannels, { id: "guidebox_id:" + args.query.guidebox_id });
@@ -343,7 +320,7 @@ function getLeanback(args, callback) {
 function findFree(args, callback) {
     // /movies/all/ {limit 1} / {limit 2} / {sources} / {platform}
 
-    justwatchGet( "/" + (args.query.type == "series" ? "shows" : "movies") + "/all/0/100/free/all", function(err, body) {
+    guideboxGet( "/" + (args.query.type == "series" ? "shows" : "movies") + "/all/0/100/free/all", function(err, body) {
         if (err) return callback(err);
         var items = body && body.results;
         if (! Array.isArray(items)) callback(new Error(".results is not an array"));
