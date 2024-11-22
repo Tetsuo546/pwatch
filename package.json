@@ -1,0 +1,36 @@
+{
+  "name": "stremio-watchhub",
+  "displayName": "WatchHub",
+  "version": "1.13.3",
+  "description": "Find where to stream your favorite movies and shows amongst iTunes, Hulu, Amazon and other UK/US services.",
+  "main": "watchhub.js",
+  "scripts": {
+    "test": "tape test/*",
+    "start": "node ./watchhub.js",
+    "docker-build": "docker build --tag=stremio/stremio-watchhub .",
+    "docker-push": "docker push stremio/stremio-watchhub"
+  },
+  "repository": {
+    "type": "git",
+    "url": "http://github.com/Stremio/stremio-watchhub"
+  },
+  "keywords": [
+    "guidebox",
+    "stremio",
+    "stremio-addons"
+  ],
+  "author": "Ivo Georgiev <ivo@linvo.com> (http://ivogeorgiev.com)",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/Stremio/stremio-watchhub/issues"
+  },
+  "homepage": "https://github.com/Stremio/stremio-watchhub",
+  "dependencies": {
+    "bagpipe": "^0.3.5",
+    "hiredis": "^0.4.1",
+    "lodash": "^3.10.1",
+    "needle": "^0.10.0",
+    "redis": "^2.4.2",
+    "stremio-addons": "^2.5.1"
+  }
+}
